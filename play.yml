@@ -1,0 +1,97 @@
+---
+- hosts: raspberry4server
+  become: yes
+
+  pre_tasks:
+  - apt:
+      name:
+      - hfsprogs
+      - hfsplus
+      update_cache: yes
+  - file:
+      path: /media/time_machine
+      state: directory
+  - lineinfile:
+      path: /etc/fstab
+      line: /dev/sda2 /media/time_machine hfsplus force,rw,user,noauto,x-systemd.automount 0 0
+      regexp: ^/dev/sda2
+  - apt:
+      name: netatalk
+  - copy:
+      dest: /etc/nsswitch.conf
+      content: |
+        # /etc/nsswitch.conf
+        #
+        # Example configuration of GNU Name Service Switch functionality.
+        # If you have the `glibc-doc-reference' and `info' packages installed, try:
+        # `info libc "Name Service Switch"' for information about this file.
+
+        passwd:         compat
+        group:          compat
+        shadow:         compat
+        gshadow:        files
+
+        hosts:          files mdns4_minimal [NOTFOUND=return] dns mdns4 mdns
+        networks:       files
+
+        protocols:      db files
+        services:       db files
+        ethers:         db files
+        rpc:            db files
+
+        netgroup:       nis
+  - copy:
+      dest: /etc/avahi/services/afpd.service
+      content: |
+        <?xml version="1.0" standalone='no'?><!--*-nxml-*-->
+        <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+        <service-group>
+            <name replace-wildcards="yes">%h</name>
+            <service>
+                <type>_afpovertcp._tcp</type>
+                <port>548</port>
+            </service>
+            <service>
+                <type>_device-info._tcp</type>
+                <port>0</port>
+                <txt-record>model=TimeCapsule</txt-record>
+            </service>
+        </service-group>
+  - copy:
+      dest: /etc/netatalk/afp.conf
+      content: |
+        ;
+        ; Netatalk 3.x configuration file
+        ;
+
+        [Global]
+        ; Global server settings
+
+        ; [Homes]
+        ; basedir regex = /xxxx
+
+        ; [My AFP Volume]
+        ; path = /path/to/volume
+
+        ; [My Time Machine Volume]
+        ; path = /path/to/backup
+        ; time machine = yes
+        [Time Machine]
+          path = /media/time_machine
+          time machine = yes
+  - copy:
+      dest: /etc/netatalk/AppleVolumes.default
+      content: |
+        /media/time_machine "Time Machine" options:tm
+  - service:
+      name: avahi-daemon
+      state: started
+  - service:
+      name: netatalk
+      state: started
+  - systemd:
+      name: avahi-daemon
+      enabled: yes
+  - systemd:
+      name: netatalk
+      enabled: yes
